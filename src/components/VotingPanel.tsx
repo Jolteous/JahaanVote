@@ -6,10 +6,10 @@ import useAppContext from '@/contexts/useAppContext';
 import { CheckCircle, Trash2, User2 } from 'lucide-react';
 import type { Poll, VoteOption } from '@/contexts/AppContext';
 import { supabase } from '@/lib/supabaseClient';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose, DialogDescription } from '@/components/ui/dialog';
 
 const VotingPanel: React.FC = () => {
-  const { activePoll, previousPolls, vote, user, deletePoll } = useAppContext();
+  const { activePoll, previousPolls, vote, user, deletePoll, undoVote, removeUserVote } = useAppContext();
   const [hasVoted, setHasVoted] = React.useState(false);
   const [showPrevious, setShowPrevious] = React.useState(false);
   const [loadingVoteStatus, setLoadingVoteStatus] = React.useState(false);
@@ -118,9 +118,20 @@ const VotingPanel: React.FC = () => {
             );
           })}
           {!disableVoting && hasVoted && (
-            <div className="flex items-center justify-center gap-2 mt-4 text-green-600">
-              <CheckCircle size={20} />
-              <span className="font-medium">You have voted!</span>
+            <div className="flex flex-col items-center justify-center gap-2 mt-4 text-green-600">
+              <div className="flex items-center gap-2">
+                <CheckCircle size={20} />
+                <span className="font-medium">You have voted!</span>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-2"
+                onClick={() => activePoll && undoVote(activePoll.id)}
+                disabled={loadingVoteStatus}
+              >
+                Undo Vote
+              </Button>
             </div>
           )}
         </CardContent>
@@ -135,6 +146,9 @@ const VotingPanel: React.FC = () => {
         <DialogContent className="max-w-lg w-full h-[32rem] flex flex-col">
           <DialogHeader>
             <DialogTitle>Previous Polls</DialogTitle>
+            <DialogDescription>
+              View the results and details of previous polls. Voting is disabled in this view.
+            </DialogDescription>
             <DialogClose asChild>
               <Button variant="ghost" className="absolute right-2 top-2" onClick={() => setModalOpen(false)}>
                 Close
@@ -154,6 +168,9 @@ const VotingPanel: React.FC = () => {
         <DialogContent className="max-w-xs w-full">
           <DialogHeader>
             <DialogTitle>Voters</DialogTitle>
+            <DialogDescription>
+              List of users who have voted in this poll. Hosts can remove votes from this list.
+            </DialogDescription>
             <DialogClose asChild>
               <Button variant="ghost" className="absolute right-2 top-2" onClick={() => setVotersModalOpen(false)}>
                 Close
@@ -168,7 +185,14 @@ const VotingPanel: React.FC = () => {
           ) : (
             <ul className="divide-y divide-gray-200">
               {voters.map((name, i) => (
-                <li key={i} className="py-2 px-1 text-gray-800 text-sm">{name}</li>
+                <li key={i} className="py-2 px-1 text-gray-800 text-sm flex items-center justify-between">
+                  <span>{name}</span>
+                  {user?.isHost && (
+                    <Button size="sm" variant="destructive" onClick={() => activePoll && removeUserVote(activePoll.id, name)}>
+                      Remove Vote
+                    </Button>
+                  )}
+                </li>
               ))}
             </ul>
           )}

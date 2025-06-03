@@ -135,16 +135,20 @@ const ChatPanel: React.FC = () => {
                 </div>
               )}
             </div>
-            <form className="flex items-center gap-2 p-2 border-t bg-gray-50" onSubmit={handleSendMessage}>
+            <form 
+              className="flex flex-wrap items-center gap-2 p-2 border-t bg-gray-50 w-full min-w-0"
+              style={{ position: 'relative' }}
+              onSubmit={handleSendMessage}
+            >
               <input
                 type="text"
-                className="flex-1 rounded border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                className="flex-1 min-w-0 rounded border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
                 placeholder="Type a message or proposal..."
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { handleSendMessage(e); } }}
               />
-              <label className="flex items-center gap-1 cursor-pointer px-2 py-1 rounded bg-emerald-100 hover:bg-emerald-200 border border-emerald-300 text-emerald-700 text-xs font-medium transition">
+              <label className="flex items-center gap-1 cursor-pointer px-2 py-1 rounded bg-emerald-100 hover:bg-emerald-200 border border-emerald-300 text-emerald-700 text-xs font-medium transition whitespace-nowrap">
                 <input
                   type="checkbox"
                   className="accent-emerald-500 h-4 w-4 rounded border border-emerald-400 focus:ring-emerald-400"
@@ -157,6 +161,7 @@ const ChatPanel: React.FC = () => {
                 type="submit"
                 className="ml-2 p-2 rounded-full bg-purple-500 hover:bg-purple-600 text-white flex items-center justify-center shadow"
                 title="Send"
+                style={{ flexShrink: 0 }}
               >
                 <Send size={20} />
               </button>

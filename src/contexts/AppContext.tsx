@@ -25,11 +25,20 @@ interface AppContextType {
   previousPolls: Poll[];
   addPoll: (poll: Omit<Poll, 'id'>) => void;
   vote: (pollId: string, optionId: string) => void;
+  undoVote: (pollId: string) => void;
   deletePoll: (pollId: string) => void;
   chatMessages: ChatMessage[];
   addChatMessage: (message: Omit<ChatMessage, 'id' | 'timestamp'>) => void;
   deleteMessage: (messageId: string) => void;
   acceptProposal: (messageId: string, question: string) => void;
+  getParticipants: () => Promise<string[]>;
+  kickUser: (userName: string) => Promise<void>;
+  banUser: (userName: string) => Promise<void>;
+  removeUserVote: (pollId: string, userName: string) => Promise<void>;
+  isKicked: boolean;
+  setIsKicked: (kicked: boolean) => void;
+  isBanned: boolean;
+  setIsBanned: (banned: boolean) => void;
 }
 
 const AppContext = createContext<AppContextType | null>(null);
@@ -44,6 +53,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [user, setUser] = useState<User | null>(null);
   const [polls, setPolls] = useState<Poll[]>([]);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [isKicked, setIsKicked] = React.useState(false);
+  const [isBanned, setIsBanned] = React.useState(false);
 
   // Derived state for active/previous polls
   const activePoll = polls.length > 0 ? polls[0] : null;
@@ -150,6 +161,75 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, []);
 
+  // On mount, check if user is in blocklist (banned)
+  React.useEffect(() => {
+    if (!user?.name) return;
+    const checkBlock = async () => {
+      const { data } = await supabase.from('blocklist').select('user_name').eq('user_name', user.name).maybeSingle();
+      setIsBanned(!!data);
+    };
+    checkBlock();
+  }, [user?.name]);
+
+  // Real-time banned detection
+  React.useEffect(() => {
+    if (!user?.name) return;
+    let isMounted = true;
+    const checkBlock = async () => {
+      const { data } = await supabase.from('blocklist').select('user_name').eq('user_name', user.name).maybeSingle();
+      if (isMounted) setIsBanned(!!data);
+    };
+    checkBlock();
+    const blocklistChannel = supabase
+      .channel('blocklist_changes_' + user.name)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'blocklist', filter: `user_name=eq.${user.name}` },
+        checkBlock
+      )
+      .subscribe();
+    return () => {
+      isMounted = false;
+      supabase.removeChannel(blocklistChannel);
+    };
+  }, [user?.name]);
+
+  // On mount, check for kicked flag in presence
+  React.useEffect(() => {
+    if (!user?.name) return;
+    let isMounted = true;
+    const checkKicked = async () => {
+      // Only set kicked if not banned
+      if (isBanned) {
+        setIsKicked(false);
+        return;
+      }
+      const { data: presence } = await supabase.from('presence').select('kicked').eq('user_name', user.name).maybeSingle();
+      if (presence && presence.kicked && isMounted) {
+        setIsKicked(true);
+        // Remove the presence row so they can rejoin if not banned
+        await supabase.from('presence').delete().eq('user_name', user.name);
+        // Clear the kicked flag for this user so it's a one-time event
+        await supabase.from('presence').upsert({ user_name: user.name, kicked: false, last_seen: new Date(0).toISOString() });
+      } else if (isMounted) {
+        setIsKicked(false);
+      }
+    };
+    checkKicked();
+    const presenceChannel = supabase
+      .channel('presence_kick_' + user.name)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'presence', filter: `user_name=eq.${user.name}` },
+        checkKicked
+      )
+      .subscribe();
+    return () => {
+      isMounted = false;
+      supabase.removeChannel(presenceChannel);
+    };
+  }, [user?.name, isBanned]);
+
   // Insert new poll into Supabase
   const addPoll = async (poll: Omit<Poll, 'id'>) => {
     const { data, error } = await supabase
@@ -204,6 +284,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // No manual refetch; real-time will update UI
   };
 
+  // Undo vote: remove user's vote from poll_votes and decrement the option's vote count
+  const undoVote = async (pollId: string) => {
+    if (!user?.name) return;
+    // Find the user's vote for this poll
+    const { data: existingVote, error: checkError } = await supabase
+      .from('poll_votes')
+      .select('id, option_id')
+      .eq('poll_id', pollId)
+      .eq('user_name', user.name)
+      .maybeSingle();
+    if (!existingVote) {
+      // No vote to undo
+      return;
+    }
+    // Delete the vote log
+    await supabase
+      .from('poll_votes')
+      .delete()
+      .eq('id', existingVote.id);
+    // Atomically decrement vote count in poll_options using RPC (assumes you have a decrement function)
+    await supabase.rpc('decrement_poll_option_vote', { opt_id: existingVote.option_id });
+    // No manual refetch; real-time will update UI
+  };
+
   // Insert new chat message into Supabase
   const addChatMessage = async (message: Omit<ChatMessage, 'id' | 'timestamp'>) => {
     await supabase.from('chat_messages').insert([
@@ -243,6 +347,132 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  // Presence heartbeat: update presence table every 15 seconds
+  React.useEffect(() => {
+    if (!user?.name) return;
+    let isUnmounted = false;
+    const upsertPresence = async (active: boolean) => {
+      const { error } = await supabase
+        .from('presence')
+        .upsert({ user_name: user.name, last_seen: active ? new Date().toISOString() : new Date(0).toISOString() });
+      if (error) console.error('Presence upsert error:', error);
+    };
+    // Initial heartbeat
+    upsertPresence(true);
+    // Heartbeat interval
+    const interval = setInterval(() => {
+      if (!isUnmounted) upsertPresence(true);
+    }, 15000);
+    // On tab close, set last_seen to epoch (removes user quickly)
+    const handleUnload = () => upsertPresence(false);
+    window.addEventListener('beforeunload', handleUnload);
+    return () => {
+      isUnmounted = true;
+      clearInterval(interval);
+      window.removeEventListener('beforeunload', handleUnload);
+      upsertPresence(false); // Mark as offline on unmount
+    };
+  }, [user?.name]);
+
+  // Real-time participants subscription
+  const [participants, setParticipants] = React.useState<string[]>([]);
+  React.useEffect(() => {
+    let isMounted = true;
+    const fetchAndSet = async () => {
+      const since = new Date(Date.now() - 30 * 1000).toISOString();
+      const { data, error } = await supabase
+        .from('presence')
+        .select('user_name')
+        .gte('last_seen', since);
+      if (!error && isMounted) {
+        setParticipants((data || []).map((row: { user_name: string }) => row.user_name));
+      }
+    };
+    fetchAndSet();
+    const presenceChannel = supabase
+      .channel('presence_changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'presence' },
+        fetchAndSet
+      )
+      .subscribe();
+    return () => {
+      isMounted = false;
+      supabase.removeChannel(presenceChannel);
+    };
+  }, []);
+
+  // getParticipants now returns the current state
+  const getParticipants = async () => participants;
+
+  // Kick a user (remove from presence and votes, and force refresh for the kicked user)
+  const kickUser = async (userName: string) => {
+    await supabase.from('poll_votes').delete().eq('user_name', userName);
+    await supabase.from('presence').delete().eq('user_name', userName);
+    // Send a signal to the kicked user (set a flag in their localStorage via a presence update)
+    await supabase.from('presence').upsert({ user_name: userName, last_seen: new Date(0).toISOString(), kicked: true });
+  };
+
+  // Ban a user (kick + add to blocklist, and remove from presence)
+  const banUser = async (userName: string) => {
+    await supabase.from('poll_votes').delete().eq('user_name', userName);
+    await supabase.from('presence').delete().eq('user_name', userName);
+    await supabase.from('blocklist').upsert({ user_name: userName });
+  };
+
+  // On mount, check for kicked flag in presence and localStorage
+  React.useEffect(() => {
+    if (!user?.name) return;
+    let isMounted = true;
+    const checkKicked = async () => {
+      // Only set kicked if not banned
+      if (isBanned) {
+        setIsKicked(false);
+        return;
+      }
+      const { data: presence } = await supabase.from('presence').select('kicked').eq('user_name', user.name).maybeSingle();
+      if (presence && presence.kicked && isMounted) {
+        setIsKicked(true);
+        // Remove the presence row so they can rejoin if not banned
+        await supabase.from('presence').delete().eq('user_name', user.name);
+        // Clear the kicked flag for this user so it's a one-time event
+        await supabase.from('presence').upsert({ user_name: user.name, kicked: false, last_seen: new Date(0).toISOString() });
+      } else if (isMounted) {
+        setIsKicked(false);
+      }
+    };
+    checkKicked();
+    const presenceChannel = supabase
+      .channel('presence_kick_' + user.name)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'presence', filter: `user_name=eq.${user.name}` },
+        checkKicked
+      )
+      .subscribe();
+    return () => {
+      isMounted = false;
+      supabase.removeChannel(presenceChannel);
+    };
+  }, [user?.name, isBanned]);
+
+  // Host: remove a user's vote from a poll
+  const removeUserVote = async (pollId: string, userName: string) => {
+    // Find the user's vote for this poll
+    const { data: existingVote } = await supabase
+      .from('poll_votes')
+      .select('id, option_id')
+      .eq('poll_id', pollId)
+      .eq('user_name', userName)
+      .maybeSingle();
+    if (!existingVote) return;
+    // Delete the vote log
+    await supabase.from('poll_votes').delete().eq('id', existingVote.id);
+    // Decrement vote count in poll_options
+    await supabase.rpc('decrement_poll_option_vote', { opt_id: existingVote.option_id });
+  };
+
   return (
     <AppContext.Provider value={{
       user, setUser,
@@ -255,7 +485,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       chatMessages,
       addChatMessage,
       deleteMessage,
-      acceptProposal
+      acceptProposal,
+      undoVote,
+      getParticipants,
+      kickUser,
+      banUser,
+      removeUserVote,
+      isKicked,
+      setIsKicked,
+      isBanned,
+      setIsBanned,
     }}>
       {children}
     </AppContext.Provider>
@@ -263,3 +502,4 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 };
 
 export { AppContext };
+export type { Poll, VoteOption };
