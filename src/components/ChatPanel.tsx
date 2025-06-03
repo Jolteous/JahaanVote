@@ -7,7 +7,11 @@ import { Badge } from '@/components/ui/badge';
 import useAppContext from '@/contexts/useAppContext';
 import { Send, MessageSquare, Lightbulb, Check, Trash2 } from 'lucide-react';
 
-const ChatPanel: React.FC = () => {
+interface ChatPanelProps {
+  className?: string;
+}
+
+const ChatPanel: React.FC<ChatPanelProps> = ({ className }) => {
   const [message, setMessage] = useState('');
   const [isProposal, setIsProposal] = useState(false);
   const { chatMessages, addChatMessage, user, acceptProposal, deleteMessage } = useAppContext();
@@ -20,7 +24,8 @@ const ChatPanel: React.FC = () => {
   React.useEffect(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
-    const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 40;
+    // Increase threshold for 'close to bottom' to 100px
+    const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 100;
     if (isAtBottom) {
       container.scrollTop = container.scrollHeight;
       setShowNewMsgNotice(false);
@@ -33,7 +38,7 @@ const ChatPanel: React.FC = () => {
   const handleScroll = () => {
     const container = scrollContainerRef.current;
     if (!container) return;
-    const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 40;
+    const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 100;
     setUserScrolledUp(!isAtBottom);
     if (isAtBottom) setShowNewMsgNotice(false);
   };
@@ -56,7 +61,7 @@ const ChatPanel: React.FC = () => {
   };
 
   return (
-    <Card className="bg-gradient-to-br from-purple-50 to-pink-100 border-0 shadow-lg h-full flex flex-col">
+    <Card className={`bg-gradient-to-br from-purple-50 to-pink-100 border-0 shadow-lg h-full flex flex-col ${className || ''}`}>
       <CardHeader className="pb-3">
         <CardTitle className="text-xl font-bold text-gray-800 flex items-center gap-2">
           <MessageSquare className="text-purple-600" size={24} />
@@ -64,8 +69,8 @@ const ChatPanel: React.FC = () => {
         </CardTitle>
       </CardHeader>
       
-      <CardContent className="flex-1 flex flex-col">
-        <div className="flex flex-col w-full h-72 max-h-72 min-h-0 bg-white rounded-lg shadow-md">
+      <CardContent className="flex-1 flex flex-col min-h-0">
+        <div className="flex flex-col w-full flex-1 min-h-0 bg-white rounded-lg shadow-md">
           <div className="flex-1 min-h-0 flex flex-col">
             <div
               className="flex-1 min-h-0 overflow-y-auto relative"

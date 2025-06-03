@@ -110,16 +110,15 @@ const AppLayout: React.FC = () => {
       </div>
 
       {/* Main Content */}
-      <div className="container mx-auto px-4 py-6">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="container mx-auto px-4 py-6 h-full">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full min-h-0">
           {/* Voting Panel */}
-          <div className="lg:col-span-2">
+          <div className="lg:col-span-2 flex flex-col min-h-0">
             <VotingPanel />
           </div>
-          
           {/* Chat Panel */}
-          <div className="h-96 lg:h-auto">
-            <ChatPanel />
+          <div className="flex flex-col min-h-0 h-96 lg:h-[32rem] bg-white/90 rounded-lg shadow-lg p-0 overflow-hidden">
+            <ChatPanel className="h-full" />
           </div>
         </div>
         
