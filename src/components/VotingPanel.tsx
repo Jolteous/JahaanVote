@@ -97,10 +97,10 @@ const VotingPanel: React.FC = () => {
                 {canVote ? (
                   <Button
                     onClick={() => handleVote(poll.id, option.id)}
-                    className="w-full bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white font-semibold py-3 text-lg"
+                    className="w-full bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white font-semibold py-3 text-lg block text-left break-words whitespace-pre-line overflow-visible"
                     disabled={loadingVoteStatus}
                   >
-                    {option.text}
+                    <span className="block w-full break-words whitespace-pre-line text-left">{option.text}</span>
                   </Button>
                 ) : (
                   <>
