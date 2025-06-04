@@ -7,6 +7,8 @@ import { CheckCircle, Trash2, User2 } from 'lucide-react';
 import type { Poll, VoteOption } from '@/contexts/AppContext';
 import { supabase } from '@/lib/supabaseClient';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose, DialogDescription } from '@/components/ui/dialog';
+import Confetti from './Confetti';
+import EmojiReactions, { FloatingEmoji } from './EmojiReactions';
 
 const VotingPanel: React.FC = () => {
   const { activePoll, previousPolls, vote, user, deletePoll, undoVote, removeUserVote } = useAppContext();
@@ -23,12 +25,15 @@ const VotingPanel: React.FC = () => {
   const votersModalRef = React.useRef<HTMLDivElement>(null);
   const [lastFocused, setLastFocused] = React.useState<HTMLElement | null>(null);
   const liveRegionRef = React.useRef<HTMLDivElement>(null);
+  const [confettiActive, setConfettiActive] = React.useState(false);
+  const [floatingEmojis, setFloatingEmojis] = React.useState<FloatingEmoji[]>([]);
+  const emojiOptions = ['🎉', '👍', '😂', '🔥', '👏', '😍'];
+  const emojiId = React.useRef(0);
 
   // Check if the user has voted on the active poll
   React.useEffect(() => {
     const checkVoted = async () => {
       setLoadingVoteStatus(true);
-      setHasVoted(false);
       if (!activePoll || !user?.name) {
         setLoadingVoteStatus(false);
         return;
@@ -48,6 +53,7 @@ const VotingPanel: React.FC = () => {
   const handleVote = (pollId: string, optionId: string) => {
     if (!hasVoted && !loadingVoteStatus) {
       vote(pollId, optionId);
+      setConfettiActive(true);
     }
   };
 
@@ -146,6 +152,8 @@ const VotingPanel: React.FC = () => {
   const renderPoll = (poll: Poll, disableVoting = false) => {
     const totalVotes = poll.options.reduce((sum: number, option: VoteOption) => sum + option.votes, 0);
     const canVote = !disableVoting && !hasVoted;
+    // Sort options by id for consistent order
+    const sortedOptions = [...poll.options].sort((a, b) => a.id.localeCompare(b.id));
     return (
       <Card className="bg-gradient-to-br from-green-50 to-emerald-100 border-0 shadow-lg mb-6" key={poll.id}>
         <CardHeader>
@@ -172,7 +180,7 @@ const VotingPanel: React.FC = () => {
           )}
         </CardHeader>
         <CardContent className="space-y-4">
-          {poll.options.map((option: VoteOption) => {
+          {sortedOptions.map((option: VoteOption) => {
             const percentage = totalVotes > 0 ? (option.votes / totalVotes) * 100 : 0;
             return (
               <div key={option.id} className="space-y-2">
@@ -230,9 +238,34 @@ const VotingPanel: React.FC = () => {
     );
   };
 
+  function handleSendEmoji(emoji: string) {
+    setFloatingEmojis((prev) => [
+      ...prev,
+      { id: emojiId.current++, emoji },
+    ]);
+  }
+
+  function handleEmojiAnimationEnd(id: number) {
+    setFloatingEmojis((prev) => prev.filter(e => e.id !== id));
+  }
+
   return (
     <div>
-      <div ref={liveRegionRef} aria-live="polite" aria-atomic="true" className="sr-only" />
+      <Confetti trigger={confettiActive} onDone={() => setConfettiActive(false)} />
+      <EmojiReactions emojis={floatingEmojis} onAnimationEnd={handleEmojiAnimationEnd} />
+      <div className="fixed right-4 bottom-4 z-40 flex gap-2 bg-white/80 rounded-full shadow-lg px-3 py-2 border border-gray-200">
+        {emojiOptions.map((emoji) => (
+          <button
+            key={emoji}
+            type="button"
+            className="text-2xl hover:scale-125 transition-transform focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+            aria-label={`Send ${emoji} reaction`}
+            onClick={() => handleSendEmoji(emoji)}
+          >
+            {emoji}
+          </button>
+        ))}
+      </div>
       {!showPrevious && activePoll && renderPoll(activePoll)}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
         <DialogContent className="max-w-lg w-full h-[32rem] flex flex-col" ref={previousPollsModalRef} role="dialog" aria-modal="true" aria-label="Previous Polls">
