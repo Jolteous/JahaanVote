@@ -144,7 +144,7 @@ const AppLayout: React.FC = () => {
               </Button>
             </DialogClose>
           </DialogHeader>
-          <ul className="divide-y divide-gray-200">
+          <ul className="divide-y divide-gray-200 max-h-64 overflow-y-auto">
             {participants.map((name, i) => (
               <li key={i} className="py-2 px-1 text-gray-800 text-sm flex items-center justify-between">
                 <span>{name}</span>
