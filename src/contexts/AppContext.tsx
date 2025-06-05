@@ -17,6 +17,13 @@ interface ChatMessage {
   proposalAccepted?: boolean;
 }
 
+interface EmojiReaction {
+  id: string;
+  emoji: string;
+  user_name: string;
+  created_at: string;
+}
+
 interface AppContextType {
   user: User | null;
   setUser: (user: User) => void;
@@ -24,8 +31,8 @@ interface AppContextType {
   activePoll: Poll | null;
   previousPolls: Poll[];
   addPoll: (poll: Omit<Poll, 'id'>) => void;
-  vote: (pollId: string, optionId: string) => void;
-  undoVote: (pollId: string) => void;
+  vote: (pollId: string, optionId: string) => Promise<void>;
+  undoVote: (pollId: string) => Promise<void>;
   deletePoll: (pollId: string) => void;
   chatMessages: ChatMessage[];
   addChatMessage: (message: Omit<ChatMessage, 'id' | 'timestamp'>) => void;
@@ -35,6 +42,8 @@ interface AppContextType {
   kickUser: (userName: string) => Promise<void>;
   banUser: (userName: string) => Promise<void>;
   removeUserVote: (pollId: string, userName: string) => Promise<void>;
+  sendEmojiReaction: (emoji: string) => void;
+  emojiReactions: EmojiReaction[];
   isKicked: boolean;
   setIsKicked: (kicked: boolean) => void;
   isBanned: boolean;
@@ -53,6 +62,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [user, setUser] = useState<User | null>(null);
   const [polls, setPolls] = useState<Poll[]>([]);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [emojiReactions, setEmojiReactions] = useState<EmojiReaction[]>([]);
   const [isKicked, setIsKicked] = React.useState(false);
   const [isBanned, setIsBanned] = React.useState(false);
 
@@ -161,6 +171,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, []);
 
+  // Fetch emoji reactions and subscribe to real-time updates
+  useEffect(() => {
+    const fetchEmojis = async () => {
+      const { data, error } = await supabase
+        .from('emoji_reactions')
+        .select('*')
+        .order('created_at', { ascending: true });
+      if (!error && data) setEmojiReactions(data);
+    };
+    fetchEmojis();
+    const channel = supabase
+      .channel('emoji_reactions_changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'emoji_reactions' },
+        fetchEmojis
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
   // On mount, check if user is in blocklist (banned)
   React.useEffect(() => {
     if (!user?.name) return;
@@ -258,7 +291,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // Vote: enforce one vote per user per poll, log in poll_votes, increment option's votes
-  const vote = async (pollId: string, optionId: string) => {
+  const vote = async (pollId: string, optionId: string): Promise<void> => {
     if (!user?.name) return;
     // Check if user already voted in this poll
     const { data: existingVote, error: checkError } = await supabase
@@ -285,7 +318,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // Undo vote: remove user's vote from poll_votes and decrement the option's vote count
-  const undoVote = async (pollId: string) => {
+  const undoVote = async (pollId: string): Promise<void> => {
     if (!user?.name) return;
     // Find the user's vote for this poll
     const { data: existingVote, error: checkError } = await supabase
@@ -473,6 +506,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     await supabase.rpc('decrement_poll_option_vote', { opt_id: existingVote.option_id });
   };
 
+  // Send emoji reaction
+  const sendEmojiReaction = async (emoji: string) => {
+    if (!user?.name) return;
+    await supabase.from('emoji_reactions').insert({ emoji, user_name: user.name });
+  };
+
   return (
     <AppContext.Provider value={{
       user, setUser,
@@ -491,6 +530,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       kickUser,
       banUser,
       removeUserVote,
+      sendEmojiReaction,
+      emojiReactions,
       isKicked,
       setIsKicked,
       isBanned,
