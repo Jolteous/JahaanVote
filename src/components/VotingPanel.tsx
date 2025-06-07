@@ -312,6 +312,7 @@ const VotingPanel: React.FC = () => {
 
   // Track previous emojiReactions length to detect new reactions
   const prevEmojiReactions = React.useRef(emojiReactions.length);
+
   // Track last processed emoji id even when emojis are disabled
   const lastProcessedEmojiId = React.useRef<string | null>(null);
 
@@ -378,6 +379,17 @@ const VotingPanel: React.FC = () => {
       return () => clearTimeout(timeout);
     }
   }, [emojiBarVisible]);
+
+  // Ensure emoji bar starts open with no animation on first load
+  React.useEffect(() => {
+    setEmojiBarVisible(true);
+    setEmojiBarRender(true);
+    setShowBarButton(false);
+    setShowBarButtonVisible(false);
+    setEmojiBarEntering(false);
+    // Only run on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Handle show bar button fade out and emoji bar fade in
   const handleShowBar = () => {
