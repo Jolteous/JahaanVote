@@ -1,4 +1,3 @@
-
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 @tailwind base;
@@ -129,4 +128,31 @@
 .markdown-preview ul,
 .markdown-preview ol {
   @apply my-4 ml-6;
+}
+
+.animated-bg {
+  min-height: 100vh;
+  width: 100vw;
+  background: linear-gradient(120deg, #a78bfa 0%, #f472b6 50%, #fbbf24 100%);
+  background-size: 200% 200%;
+  animation: gradientMove 12s ease-in-out infinite;
+}
+
+@keyframes gradientMove {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+@media (max-width: 640px) {
+  .animated-bg {
+    background-size: 300% 300%;
+    animation-duration: 18s;
+  }
 }

@@ -126,7 +126,21 @@ const UserLogin: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-600 via-pink-500 to-orange-400 flex items-center justify-center p-4">
+    <div className="animated-bg flex flex-col items-center justify-center p-4 relative overflow-hidden min-h-screen">
+      {/* Hero Section */}
+      <div className="w-full max-w-2xl mx-auto text-center mb-10 mt-8">
+        <h1 className="text-5xl md:text-6xl font-extrabold bg-gradient-to-r from-yellow-300 via-orange-400 to-pink-600 bg-clip-text text-transparent drop-shadow-[0_2px_8px_rgba(255,255,255,0.3)] leading-tight pb-3" style={{ WebkitTextStroke: '1px #fff3', textShadow: '0 2px 12px #fff3' }}>
+          Vote Like a King.
+        </h1>
+        <p className="text-xl md:text-2xl text-white/90 font-medium mb-6 drop-shadow">
+          Real-time live polls. No sign-up. Just vote.<br />
+          <span className="text-pink-200">Instant results. Emoji reactions. Free for everyone.</span>
+        </p>
+        <div className="flex flex-col items-center">
+          <span className="animate-bounce text-4xl text-yellow-300 mb-2">↓</span>
+        </div>
+      </div>
+      {/* Login Card */}
       <Card className="w-full max-w-md shadow-2xl border-0 bg-white/90 backdrop-blur-sm">
         <CardHeader className="text-center">
           <CardTitle className="text-4xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
